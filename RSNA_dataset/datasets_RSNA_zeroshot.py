@@ -1,33 +1,15 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-# All rights reserved.
-
-# This source code is licensed under the license found in the
-# LICENSE file in the root directory of this source tree.
-# --------------------------------------------------------
-# References:
-# DeiT: https://github.com/facebookresearch/deit
-# --------------------------------------------------------
-
 import os
 import PIL
-
-from torchvision import datasets, transforms
-from torchvision.transforms.functional import InterpolationMode
-from timm.data import create_transform
-from timm.data.random_erasing import RandomErasing
+from torchvision import transforms
 from torchvision.datasets.folder import default_loader,VisionDataset,IMG_EXTENSIONS
-from typing import Any, Callable, cast, Dict, List, Optional, Tuple
+from typing import Any, Callable, Optional, Tuple
 import codecs
 import torch
-from torch import nn
-import random
 import numpy as np
 import pydicom
 import cv2
 from PIL import Image
-from transformers import BertConfig, BertTokenizer
-
-
+from transformers import BertTokenizer
 np.random.seed(0)
 
 
@@ -44,14 +26,15 @@ class MultiLabelDatasetFolder(VisionDataset):
             extensions: Optional[Tuple[str, ...]] = None,
             transform: Optional[Callable] = None,
             tokenizer = None,
-            model_type = 'ALTA'
+
     ) -> None:
         super(MultiLabelDatasetFolder, self).__init__(root, transform=transform)
+        self.RSNA_root = './RSNA_dataset'
         samples = self.read_samples(self.root)
         self.loader = loader
         self.extensions = extensions
         self.samples = samples
-        self.model_type = model_type
+
 
         pos_query = [
             'There is pneumonia',
@@ -61,17 +44,17 @@ class MultiLabelDatasetFolder(VisionDataset):
         ]
 
         if tokenizer is None:
-            self.tokenizer = CXRBertTokenizer.from_pretrained("./BiomedVLP-CXR-BERT-specialized")
+            self.tokenizer = CXRBertTokenizer.from_pretrained("BiomedVLP-CXR-BERT-specialized")
         else:
             self.tokenizer = tokenizer
+        
         self.max_caption_length = 10
 
-        # tokenizing positive queries
         pos_tokens = []
         for query in pos_query:
             pos_tokens.append(self.tokenizer(query, padding='max_length', max_length=self.max_caption_length, truncation=False))
 
-        # tokenizing negative queries
+
         neg_tokens = []
         for query in neg_query:
             neg_tokens.append(self.tokenizer(query, padding='max_length', max_length=self.max_caption_length, truncation=False))
@@ -79,10 +62,8 @@ class MultiLabelDatasetFolder(VisionDataset):
         self.pos_batch_dict = self._from_tokens_to_tensor(pos_tokens)
         self.neg_batch_dict = self._from_tokens_to_tensor(neg_tokens)
 
-        print(1)
 
     def _from_tokens_to_tensor(self, tokens):
-        # 将 tokenized sentences 转换为 tensor
         input_ids = [torch.tensor(item["input_ids"]) for item in tokens]
         token_type_ids = [torch.tensor(item["token_type_ids"]) for item in tokens]
         attention_mask = [torch.tensor(item["attention_mask"]) for item in tokens]
@@ -103,14 +84,14 @@ class MultiLabelDatasetFolder(VisionDataset):
         }
         return batch_dict
 
-    def read_samples(self,root):
+    def read_samples(self, root):
         data = codecs.open(root,"r","utf-8","ignore")
         outputList = []
         for line in data:
             outputList.append(line.strip())
         path_list = []
         for output in outputList:
-            path_list.append((os.path.join('/'.join(root.split('/')[:-1]),output.split(' ')[0]),[ int(i) for i in output.split(' ')[1:]]))
+            path_list.append((os.path.join(self.RSNA_root, output.split( )[0]), [ int(i) for i in output.split(' ')[1:]]))
         return path_list
 
     def _resize_img(self, img, scale):
@@ -190,7 +171,7 @@ class MultiLabelDatasetFolder(VisionDataset):
         return len(self.samples)
 
 
-def build_transform(reshape_size, crop_size, mean=None, std=None, model_type='ALTA'):
+def build_transform(reshape_size, crop_size, mean=None, std=None):
     t = []
     t.append(
         transforms.Resize(reshape_size, interpolation=PIL.Image.BICUBIC),  # to maintain same ratio w.r.t. 224 images
@@ -203,16 +184,16 @@ def build_transform(reshape_size, crop_size, mean=None, std=None, model_type='AL
     return transforms.Compose(t)
 
 
-def build_dataset(split, reshape_size, crop_size, mean, std, tokenizer=None, model_type='ALTA'):
-    transform = build_transform(reshape_size, crop_size, mean, std, model_type)
+def build_dataset(split, reshape_size, crop_size, mean, std, tokenizer=None):
+    transform = build_transform(reshape_size, crop_size, mean, std)
 
     print(transform)
 
     filename = 'test_list.txt' if split == 'test' else 'val_list.txt'
     
-    root = os.path.join('./RSNA_dataset', filename)
+    root = os.path.join('RSNA_dataset', filename)
     
-    dataset = MultiLabelDatasetFolder(root, default_loader, IMG_EXTENSIONS, transform=transform, tokenizer=tokenizer, model_type=model_type)
+    dataset = MultiLabelDatasetFolder(root, default_loader, IMG_EXTENSIONS, transform=transform, tokenizer=tokenizer)
     print(dataset)
 
     return dataset

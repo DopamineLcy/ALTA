@@ -33,7 +33,7 @@ from util.misc import NativeScalerWithGradNormCount as NativeScaler
 from util import trainable_params
 
 import model as alta_model
-from engine_pretrain import train_one_epoch, valid_one_epoch, zeroshot_valid_one_epoch
+from engine_pretrain import train_one_epoch, zeroshot_valid_one_epoch
 import pretrain_datasets
 
 # for F1 validation
@@ -112,8 +112,6 @@ def get_args_parser():
                         help='url used to set up distributed training')
 
     # other parameters
-    parser.add_argument('--zeroshot_valid', action='store_true')
-    parser.set_defaults(zeroshot_valid=False)
     parser.add_argument('--script', type=str, default='')
     parser.add_argument('--note', type=str, default='')
     return parser
@@ -151,7 +149,6 @@ def main(args):
     dataset_type = 'ALTADataset'
     dataset = pretrain_datasets.__dict__[dataset_type]
     dataset_train = dataset(args.data_path, is_train=True, args=args)
-    dataset_valid = dataset(args.data_path, is_train=False, args=args)
 
     if True:  # args.distributed:
         num_tasks = misc.get_world_size()
@@ -160,10 +157,6 @@ def main(args):
             dataset_train, num_replicas=num_tasks, rank=global_rank, shuffle=True
         )
         print("Sampler_train = %s" % str(sampler_train))
-        sampler_valid = torch.utils.data.DistributedSampler(
-            dataset_valid, num_replicas=num_tasks, rank=global_rank, shuffle=False
-        )
-        print("Sampler_valid = %s" % str(sampler_valid))
     else:
         sampler_train = torch.utils.data.RandomSampler(dataset_train)
 
@@ -181,14 +174,6 @@ def main(args):
         pin_memory=args.pin_mem,
         drop_last=True,
         collate_fn=dataset_train.collate_fn
-    )
-    data_loader_valid = torch.utils.data.DataLoader(
-        dataset_valid, sampler=sampler_valid,
-        batch_size=args.batch_size,
-        num_workers=args.num_workers,
-        pin_memory=args.pin_mem,
-        drop_last=False,
-        collate_fn=dataset_valid.collate_fn
     )
 
     # define the model
@@ -217,21 +202,20 @@ def main(args):
 
     
     # for F1 validation --------------------------------
-    if args.zeroshot_valid:
-        reshape_size = 256
-        crop_size = 224
-        mean=[0.4785]
-        std=[0.2834]
-        dataset_val = build_dataset('val', reshape_size, crop_size, mean, std)
-        sampler_val = torch.utils.data.SequentialSampler(dataset_val)
+    reshape_size = 256
+    crop_size = 224
+    mean=[0.4785]
+    std=[0.2834]
+    dataset_val = build_dataset('val', reshape_size, crop_size, mean, std)
+    sampler_val = torch.utils.data.SequentialSampler(dataset_val)
 
-        data_loader_val = torch.utils.data.DataLoader(
-            dataset_val, sampler=sampler_val,
-            batch_size=32,
-            num_workers=args.num_workers,
-            pin_memory=args.pin_mem,
-            drop_last=False
-        )
+    data_loader_val = torch.utils.data.DataLoader(
+        dataset_val, sampler=sampler_val,
+        batch_size=32,
+        num_workers=args.num_workers,
+        pin_memory=args.pin_mem,
+        drop_last=False
+    )
         
     # for F1 validation end ----------------------------
     
@@ -269,56 +253,34 @@ def main(args):
                 log_writer.flush()
             with open(os.path.join(args.output_dir, "log.txt"), mode="a", encoding="utf-8") as f:
                 f.write(json.dumps(log_stats) + "\n")
-
-        valid_stats = valid_one_epoch(
-            model, data_loader_valid,
+        
+        # valid zeroshot on RSNA valid
+        
+        zeroshot_valid_stats, auroc, acc, f1, recall, prec = zeroshot_valid_one_epoch(
+            model, data_loader_val,
             optimizer, device, epoch, loss_scaler,
             log_writer=log_writer,
             args=args
         )
 
-        if args.output_dir and lowest_loss > valid_stats['loss']:
-            lowest_loss = valid_stats['loss']
+        if args.output_dir and auroc > best_auroc:
+            best_auroc = auroc
             misc.save_model(
                 args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
-                loss_scaler=loss_scaler, epoch=epoch, name="best_loss")
+                loss_scaler=loss_scaler, epoch=epoch, name="best_auroc")
 
-        log_stats = {**{f'valid_{k}': v for k, v in valid_stats.items()},
+        log_stats = {**{f'valid_{k}': v for k, v in zeroshot_valid_stats.items()},
                         'epoch': epoch,} 
         if args.output_dir and misc.is_main_process():
             if log_writer is not None:
-                log_writer.add_scalar('valid_loss', valid_stats['loss'], epoch)
+                log_writer.add_scalar('zeroshot/auroc', auroc.item(), epoch)
+                log_writer.add_scalar('zeroshot/acc', acc.item(), epoch)
+                log_writer.add_scalar('zeroshot/f1', f1.item(), epoch)
+                log_writer.add_scalar('zeroshot/recall', recall.item(), epoch)
+                log_writer.add_scalar('zeroshot/prec', prec.item(), epoch)
                 log_writer.flush()
             with open(os.path.join(args.output_dir, "log.txt"), mode="a", encoding="utf-8") as f:
                 f.write(json.dumps(log_stats) + "\n")
-        
-        # valid zeroshot on RSNA valid
-        if args.zeroshot_valid:
-            zeroshot_valid_stats, auroc, acc, f1, recall, prec = zeroshot_valid_one_epoch(
-                model, data_loader_val,
-                optimizer, device, epoch, loss_scaler,
-                log_writer=log_writer,
-                args=args
-            )
-
-            if args.output_dir and auroc > best_auroc:
-                best_auroc = auroc
-                misc.save_model(
-                    args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
-                    loss_scaler=loss_scaler, epoch=epoch, name="best_auroc")
-
-            log_stats = {**{f'valid_{k}': v for k, v in zeroshot_valid_stats.items()},
-                            'epoch': epoch,} 
-            if args.output_dir and misc.is_main_process():
-                if log_writer is not None:
-                    log_writer.add_scalar('zeroshot/auroc', auroc.item(), epoch)
-                    log_writer.add_scalar('zeroshot/acc', acc.item(), epoch)
-                    log_writer.add_scalar('zeroshot/f1', f1.item(), epoch)
-                    log_writer.add_scalar('zeroshot/recall', recall.item(), epoch)
-                    log_writer.add_scalar('zeroshot/prec', prec.item(), epoch)
-                    log_writer.flush()
-                with open(os.path.join(args.output_dir, "log.txt"), mode="a", encoding="utf-8") as f:
-                    f.write(json.dumps(log_stats) + "\n")
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))

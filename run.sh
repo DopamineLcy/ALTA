@@ -1,7 +1,7 @@
-CUDA_VISIBLE_DEVICES=7 OMP_NUM_THREADS=1 python -m torch.distributed.launch --nproc_per_node=1 --master_port 13345 main_pretrain.py \
+CUDA_VISIBLE_DEVICES=0,1,2,3 OMP_NUM_THREADS=1 python -m torch.distributed.launch --nproc_per_node=4 --master_port 12345 main_pretrain.py \
     --num_workers 10 \
     --accum_iter 1 \
-    --batch_size 2 \
+    --batch_size 24 \
     --save_freq 5 \
     --model alta \
     --norm_pix_loss \
@@ -14,9 +14,5 @@ CUDA_VISIBLE_DEVICES=7 OMP_NUM_THREADS=1 python -m torch.distributed.launch --np
     --resume ./vision_encoder_weights/MRM.pth \
     --from_begin \
     --script $0 \
-    --zeroshot_valid \
     --output_dir ./ALTA_results/ \
     --note alta \
-
-
-# -m debugpy --listen 5678 --wait-for-client
