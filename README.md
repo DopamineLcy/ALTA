@@ -72,3 +72,6 @@ Here we provide the trained weights of ALTA, you can download it from [Google Dr
 
 ## Acknowledgments
 Some code of this repository is borrowed from [MAE](https://github.com/facebookresearch/mae), [MRM](https://github.com/RL4M/MRM-pytorch), [AIM](https://adapt-image-models.github.io/), [GLoRIA](https://github.com/marshuang80/gloria/) and [huggingface](https://huggingface.co).
+
+## License
+This project is under the CC-BY-NC 4.0 license. See [LICENSE](LICENSE) for details.
