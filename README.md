@@ -1,5 +1,5 @@
 # Efficient medical vision-language alignment through adapting masked vision models (ALTA)
-This is the official code for the paper: Efficient medical vision-language alignment through adapting masked vision models (TMI 2025).
+This is the official code for the paper: [Efficient medical vision-language alignment through adapting masked vision models (TMI 2025)](https://arxiv.org/abs/2506.08990).
 
 ![ALTA](assets/overview.jpg)
 
