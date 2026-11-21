@@ -38,7 +38,7 @@ If you are using conda, we provide an easy way to continue:
       ./run.sh
 
 ### 5 Evaluation
-Here we provide the trained weights of ALTA, you can download it from [Google Drive](https://drive.google.com/file/d/1glNAfI3URUtSjHNGcfIUNr5Wk3tqa_1P/view?usp=drive_link) and put it into the directory of [ALTA_weights](ALTA_weights).
+Here we provide the trained weights of ALTA, you can download it from [Hugging Face](https://huggingface.co/DopamineL/ALTA) and put it into the directory of [ALTA_weights](ALTA_weights).
 #### 5.1 Image-to-image retrieval on CheXpert 8×200
 - Prepare the dataset following [convirt](https://github.com/yuhaozhang/convirt) and put the directories of "image-retrieval" and "text-retrieval" into [CheXpert8X200_dataset](CheXpert8X200_dataset).
 - Run
